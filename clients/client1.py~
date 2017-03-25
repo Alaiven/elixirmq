@@ -1,0 +1,15 @@
+import socket
+import json
+
+
+TCP_IP = "127.0.0.1"
+TCP_PORT = 30001
+BUFFER_SIZE = 1024
+
+CHANNEL = "channel1"
+TARGET_CHANNEL = "channel2"
+
+SUB_MSG = json.dumps({'command': 'subscribe', 'channel': CHANNEL})
+
+print SUB_MSG
+
