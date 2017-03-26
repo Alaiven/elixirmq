@@ -1,5 +1,5 @@
 # Elixirmq
 
-** Message queue written in Elixir language ** 
+**Message queue written in Elixir language** 
 
 
