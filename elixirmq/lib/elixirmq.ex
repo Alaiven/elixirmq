@@ -10,7 +10,7 @@ defmodule Elixirmq do
 
   defp tcp_start(port) do
     Logger.info "Server started on port: " <> Integer.to_string(port)
-    tcp_options = [:binary, packet: 0, active: false, reuseaddr: true]
+    tcp_options = [:binary, packet: :raw, active: false, reuseaddr: true]
     {:ok, socket} = :gen_tcp.listen(port, tcp_options)
 
     {:ok, subs} = Subscriptions.new
