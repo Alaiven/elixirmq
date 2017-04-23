@@ -1,8 +1,7 @@
-from random import randint, choice
+from random import choice
 from threading import Thread
 import socket
 import json
-import time
 import sys
 import struct
 
@@ -16,16 +15,17 @@ def wall(direction):
         'r': 'l'
     }[direction]
 
-def send_message(sock, message):
-    message_json = json.dumps(message).encode("utf8")
+def send_message(sock, command, channel, message):
+    message_json = json.dumps({'command': command, 'channel': channel,
+                               'message': message}).encode("utf8")
     message_len = struct.pack('>i', len(message_json))
     sock.send(message_len + message_json)
 
 def tcp_worker():   
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((TCP_IP, TCP_PORT))
-    send_message(sock, SUB_MSG)
-    send_message(sock, {'command': 'send', 'channel': TARGET_CHANNEL, 'message': {'comm': 's', 'id': CHANNEL}})
+    send_message(sock, 'subscribe', CHANNEL, '')
+    send_message(sock, 'send', TARGET_CHANNEL, {'comm': 's', 'id': CHANNEL})
 
     reminder = ""
 
@@ -35,9 +35,8 @@ def tcp_worker():
             break
 
         print data
-        
-        reminder = handle_message(reminder + data, sock)
 
+        reminder = handle_message(reminder + data, sock)
 
         if reminder is None:
             reminder = ""
@@ -52,19 +51,19 @@ def handle_message(data, sock):
     else:
         parse_message(message, sock)
         handle_message(reminder, sock)
-    
+
 
 def parse_message(message, sock):
     print message
     msg = json.loads(message)
 
     if msg["status"] == "ok":
-        send_message(sock, {'command': 'send', 'channel': TARGET_CHANNEL, 'message': {'comm': 'm', 'id': CHANNEL, 'dir': DIR}})
+        send_message(sock, 'send', TARGET_CHANNEL, {'comm': 'm', 'id': CHANNEL, 'dir': DIR})
 
     if msg["status"] == "wall":
         global DIR
         DIR = wall(DIR)
-        send_message(sock, {'command': 'send', 'channel': TARGET_CHANNEL, 'message': {'comm': 'm', 'id': CHANNEL, 'dir': DIR}})
+        send_message(sock, 'send', TARGET_CHANNEL, {'comm': 'm', 'id': CHANNEL, 'dir': DIR})
 
 def get_message(data):
     if len(data) < 4:
@@ -90,5 +89,3 @@ SUB_MSG = {'command': 'subscribe', 'channel': CHANNEL}
 WORKER = Thread(target=tcp_worker)
 WORKER.setDaemon(False)
 WORKER.start()
-
-

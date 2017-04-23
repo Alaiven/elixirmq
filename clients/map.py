@@ -1,32 +1,32 @@
-from Tkinter import *
+from Tkinter import Tk, Canvas, mainloop
 from random import randint
 from Queue import Queue
 from threading import Thread
 import socket
 import json
-import time
-import sys
 import struct
 
 WIDTH = 800
 HEIGHT = 600
 
-def send_message(sock, message):
-    message_json = json.dumps(message).encode("utf8")
+def send_message(sock, command, channel, message):
+    message_json = json.dumps({'command': command, 'channel': channel,
+                               'message': message}).encode("utf8")
     message_len = struct.pack('>i', len(message_json))
     sock.send(message_len + message_json)
 
 class Player(object):
     def __init__(self, ground):
 
-        ox, oy = (randint(0, WIDTH), randint(0,HEIGHT))
+        origin_x, origin_y = (randint(0, WIDTH), randint(0, HEIGHT))
         fill_color = '#%02X%02X%02X' % (randint(0, 255), randint(0, 255), randint(0, 255))
         self.ground = ground
-        self.obj = ground.create_rectangle(ox, oy, ox+4, oy+4, fill=fill_color)
+        self.obj = ground.create_rectangle(origin_x, origin_y,
+                                           origin_x+4, origin_y+4, fill=fill_color)
 
     def move(self, direction):
-        dx, dy = self.get_d(direction)
-        self.ground.move(self.obj, dx, dy)
+        distance_x, distance_y = self.get_d(direction)
+        self.ground.move(self.obj, distance_x, distance_y)
         return self.check_wall(direction)
 
     def get_d(self, direction):
@@ -71,9 +71,9 @@ class Game(object):
                     self.out_queue.put_nowait(("wall", args[0]))
                 else:
                     self.out_queue.put_nowait(("ok", args[0]))
-                    
+
         self.root.after(33, self.animate)
-            
+
     def add_player(self, player_id):
         self.players[player_id] = Player(self.ground)
 
@@ -84,14 +84,14 @@ class Game(object):
         return self.players[player_id].check_wall(direction)
 
 def tcp_worker():   
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect((TCP_IP, TCP_PORT))
-    send_message(s, SUB_MSG)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((TCP_IP, TCP_PORT))
+    send_message(sock, 'subscribe', CHANNEL, '')
 
     reminder = ""
 
     while True:
-        data = s.recv(BUFFER_SIZE)
+        data = sock.recv(BUFFER_SIZE)
         if not data:
             break
 
@@ -100,9 +100,9 @@ def tcp_worker():
         if reminder is None:
             reminder = ""
 
-        handle_response(s)
+        handle_response(sock)
 
-    s.close()
+    sock.close()
 
 def handle_message(data):
     message, reminder = get_message(data)
@@ -112,7 +112,7 @@ def handle_message(data):
     else:
         parse_message(message)
         handle_message(reminder)
-    
+
 
 def parse_message(message):
     msg = json.loads(message)
@@ -128,9 +128,9 @@ def handle_response(sock):
     comm, player_id = OUT_QUEUE.get()
 
     if comm == "ok":
-        send_message(sock, {'command': 'send', 'channel': player_id, 'message': {'status': 'ok'}})
+        send_message(sock, 'send', player_id, {'status': 'ok'})
     if comm == "wall":
-        send_message(sock, {'command': 'send', 'channel': player_id, 'message': {'status': 'wall'}})
+        send_message(sock, 'send', player_id, {'status': 'wall'})
 
     if not OUT_QUEUE.empty():
         handle_response(sock)
@@ -165,6 +165,3 @@ WORKER.setDaemon(False)
 WORKER.start()
 
 mainloop()
-
-
-
