@@ -30,6 +30,7 @@ defmodule Elixirmq.Mixfile do
   #
   # Type `mix help deps` for more examples and options
   defp deps do
-    [{:json, "~> 1.0"}]
+    [{:json, "~> 1.0"},
+     {:redix, ">= 0.0.0"}]
   end
 end

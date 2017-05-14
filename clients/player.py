@@ -1,80 +1,83 @@
 from random import choice
-from threading import Thread
 import socket
 import json
 import sys
 import struct
 
-DIR = choice(['l', 'r', 't', 'b'])
+class Player(object):
+    def __init__(self, ip, port):
+        self.direction = choice(['l', 'r', 't', 'b'])
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.connect((ip, port))
 
-def wall(direction):
-    return {
-        't': 'b',
-        'b': 't',
-        'l': 'r',
-        'r': 'l'
-    }[direction]
+    def start(self):
+        self.tcp_worker()
 
-def send_message(sock, command, channel, message):
-    message_json = json.dumps({'command': command, 'channel': channel,
-                               'message': message}).encode("utf8")
-    message_len = struct.pack('>i', len(message_json))
-    sock.send(message_len + message_json)
+    def wall(self):
+        self.direction = {
+            't': 'b',
+            'b': 't',
+            'l': 'r',
+            'r': 'l'
+        }[self.direction]
 
-def tcp_worker():   
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.connect((TCP_IP, TCP_PORT))
-    send_message(sock, 'subscribe', CHANNEL, '')
-    send_message(sock, 'send', TARGET_CHANNEL, {'comm': 's', 'id': CHANNEL})
+    def send_message(self, command, channel, message):
+        message_json = json.dumps({'command': command, 'channel': channel,
+                                   'message': message}).encode("utf8")
+        message_len = struct.pack('>i', len(message_json))
+        self.sock.send(message_len + message_json)
 
-    reminder = ""
+    def tcp_worker(self):   
+        self.send_message('subscribe', CHANNEL, '')
+        self.send_message('send', TARGET_CHANNEL, {'comm': 's', 'id': CHANNEL})
 
-    while True:
-        data = sock.recv(BUFFER_SIZE)
-        if not data:
-            break
+        reminder = ""
 
-        print data
+        while True:
+            data = self.sock.recv(BUFFER_SIZE)
+            if not data:
+                break
 
-        reminder = handle_message(reminder + data, sock)
+            reminder = self.handle_message(reminder + data)
 
-        if reminder is None:
-            reminder = ""
+            if reminder is None:
+                reminder = ""
 
-    sock.close()
+        self.sock.close()
 
-def handle_message(data, sock):
-    message, reminder = get_message(data)
+    def handle_message(self, data):
+        message, reminder = self.get_message(data)
 
-    if message == "":
-        return reminder
-    else:
-        parse_message(message, sock)
-        handle_message(reminder, sock)
+        if message == "":
+            return reminder
+        else:
+            self.parse_message(message)
+            self.handle_message(reminder)
 
 
-def parse_message(message, sock):
-    print message
-    msg = json.loads(message)
+    def parse_message(self, message):
+        msg = json.loads(message)
 
-    if msg["status"] == "ok":
-        send_message(sock, 'send', TARGET_CHANNEL, {'comm': 'm', 'id': CHANNEL, 'dir': DIR})
+        if msg["status"] == "ok":
+            self.send_message('send', TARGET_CHANNEL,
+                              {'comm': 'm', 'id': CHANNEL, 'dir': self.direction})
 
-    if msg["status"] == "wall":
-        global DIR
-        DIR = wall(DIR)
-        send_message(sock, 'send', TARGET_CHANNEL, {'comm': 'm', 'id': CHANNEL, 'dir': DIR})
+        if msg["status"] == "wall":
+            self.wall()
+            self.send_message('send', TARGET_CHANNEL,
+                              {'comm': 'm', 'id': CHANNEL, 'dir': self.direction})
 
-def get_message(data):
-    if len(data) < 4:
-        return ("", data)
+    @staticmethod
+    def get_message(data):
+        if len(data) < 4:
+            return ("", data)
 
-    msg_length = struct.unpack('>i', data[:4])[0]
+        msg_length = struct.unpack('>i', data[:4])[0]
 
-    if msg_length > len(data[4:]):
-        return ("", data)
-    else:
-        return (data[4:4+msg_length], data[4+msg_length:])
+        if msg_length > len(data[4:]):
+            return ("", data)
+        else:
+            return (data[4:4+msg_length], data[4+msg_length:])
 
 
 TCP_IP = "127.0.0.1"
@@ -86,6 +89,5 @@ TARGET_CHANNEL = "ch1"
 
 SUB_MSG = {'command': 'subscribe', 'channel': CHANNEL}
 
-WORKER = Thread(target=tcp_worker)
-WORKER.setDaemon(False)
-WORKER.start()
+PLAYER = Player(TCP_IP, TCP_PORT)
+PLAYER.start()

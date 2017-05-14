@@ -38,8 +38,6 @@ defmodule MessageWorker do
       <<size :: binary-size(4)>> <> data = data
       <<msg_size :: size(32)>> = size
     
-      Logger.info "Size:" <> Integer.to_string(msg_size)
-    
       if msg_size > byte_size(data) do
 	{:msg_too_short, size <> data}
       else
@@ -64,15 +62,9 @@ defmodule MessageWorker do
     end
   end
 
-  def snd(connection, message) do
-    case MessageParser.encode(message) do
-      {:ok, msg} ->
-	message_size = byte_size(msg)
-	:gen_tcp.send(connection, <<message_size :: size(32)>> <> msg)
-      {:error, msg} ->
-	Logger.info "Invalid JSON to send: " <> msg
-    end
-   
+  def send_message(connection, message) do
+    message_size = byte_size(message)
+    :gen_tcp.send(connection, <<message_size :: size(32)>> <> message)
   end
   
 end

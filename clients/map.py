@@ -9,27 +9,31 @@ import struct
 WIDTH = 800
 HEIGHT = 600
 
-def send_message(sock, command, channel, message):
-    message_json = json.dumps({'command': command, 'channel': channel,
-                               'message': message}).encode("utf8")
-    message_len = struct.pack('>i', len(message_json))
-    sock.send(message_len + message_json)
-
 class Player(object):
     def __init__(self, ground):
-
-        origin_x, origin_y = (randint(0, WIDTH), randint(0, HEIGHT))
+        self.posx, self.posy = (randint(0, WIDTH), randint(0, HEIGHT))
         fill_color = '#%02X%02X%02X' % (randint(0, 255), randint(0, 255), randint(0, 255))
         self.ground = ground
-        self.obj = ground.create_rectangle(origin_x, origin_y,
-                                           origin_x+4, origin_y+4, fill=fill_color)
+        self.obj = ground.create_rectangle(self.posx, self.posy,
+                                           self.posx+4, self.posy+4, fill=fill_color)
+        self.old_posx = self.posx
+        self.old_posy = self.posy
 
     def move(self, direction):
         distance_x, distance_y = self.get_d(direction)
-        self.ground.move(self.obj, distance_x, distance_y)
+        self.posx += distance_x
+        self.posy += distance_y
         return self.check_wall(direction)
 
-    def get_d(self, direction):
+    def place(self):
+        distance_x = self.posx - self.old_posx
+        distance_y = self.posy - self.old_posy
+        self.ground.move(self.obj, distance_x, distance_y)
+        self.old_posx = self.posx
+        self.old_posy = self.posy
+
+    @staticmethod
+    def get_d(direction):
         return {
             't': (0, -1),
             'b': (0, 1),
@@ -53,7 +57,22 @@ class Game(object):
         self.ground.pack()
         self.in_queue = in_queue
         self.out_queue = out_queue
-        self.root.after(33, self.animate)
+
+    def start(self):
+        self.root.after(1, self.place_players)
+        worker = Thread(target=self.loop)
+        worker.setDaemon(True)
+        worker.start()
+
+
+    def place_players(self):
+        for player in self.players.values():
+            player.place()
+        self.root.after(1, self.place_players)
+
+    def loop(self):
+        while True:
+            self.animate()
 
     def animate(self):
         while not self.in_queue.empty():
@@ -72,8 +91,6 @@ class Game(object):
                 else:
                     self.out_queue.put_nowait(("ok", args[0]))
 
-        self.root.after(33, self.animate)
-
     def add_player(self, player_id):
         self.players[player_id] = Player(self.ground)
 
@@ -83,68 +100,85 @@ class Game(object):
     def check_wall_player(self, player_id, direction):
         return self.players[player_id].check_wall(direction)
 
-def tcp_worker():   
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.connect((TCP_IP, TCP_PORT))
-    send_message(sock, 'subscribe', CHANNEL, '')
+class Communicator(object):
+    def __init__(self, ip, port, in_queue, out_queue):
+        self.in_queue = in_queue
+        self.out_queue = out_queue
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.connect((ip, port))
 
-    reminder = ""
+    def start(self):
+        worker = Thread(target=self.tcp_worker)
+        worker.setDaemon(True)
+        worker.start()
 
-    while True:
-        data = sock.recv(BUFFER_SIZE)
-        if not data:
-            break
+    def tcp_worker(self):   
+        self.send_message('subscribe', CHANNEL, '')
 
-        reminder = handle_message(reminder + data)
+        reminder = ""
 
-        if reminder is None:
-            reminder = ""
+        while True:
+            data = self.sock.recv(BUFFER_SIZE)
+            if not data:
+                break
 
-        handle_response(sock)
+            reminder = self.handle_message(reminder + data)
 
-    sock.close()
+            if reminder is None:
+                reminder = ""
 
-def handle_message(data):
-    message, reminder = get_message(data)
+            self.handle_response()
 
-    if message == "":
-        return reminder
-    else:
-        parse_message(message)
-        handle_message(reminder)
+        self.sock.close()
+
+    def handle_message(self, data):
+        message, reminder = self.get_message(data)
+
+        if message == "":
+            return reminder
+        else:
+            self.parse_message(message)
+            self.handle_message(reminder)
 
 
-def parse_message(message):
-    msg = json.loads(message)
+    def parse_message(self, message):
+        msg = json.loads(message)
 
-    if msg["comm"] == "s":
-        IN_QUEUE.put_nowait(("s", [msg["id"]]))
+        if msg["comm"] == "s":
+            self.in_queue.put_nowait(("s", [msg["id"]]))
 
-    if msg["comm"] == "m":
-        IN_QUEUE.put_nowait(("m", [msg["id"], msg["dir"]]))
+        if msg["comm"] == "m":
+            self.in_queue.put_nowait(("m", [msg["id"], msg["dir"]]))
 
-def handle_response(sock):
+    def handle_response(self):
 
-    comm, player_id = OUT_QUEUE.get()
+        comm, player_id = self.out_queue.get()
 
-    if comm == "ok":
-        send_message(sock, 'send', player_id, {'status': 'ok'})
-    if comm == "wall":
-        send_message(sock, 'send', player_id, {'status': 'wall'})
+        if comm == "ok":
+            self.send_message('send', player_id, {'status': 'ok'})
+        if comm == "wall":
+            self.send_message('send', player_id, {'status': 'wall'})
 
-    if not OUT_QUEUE.empty():
-        handle_response(sock)
+        if not self.out_queue.empty():
+            self.handle_response()
 
-def get_message(data):
-    if len(data) < 4:
-        return ("", data)
+    @staticmethod
+    def get_message(data):
+        if len(data) < 4:
+            return ("", data)
 
-    msg_length = struct.unpack('>i', data[:4])[0]
+        msg_length = struct.unpack('>i', data[:4])[0]
 
-    if msg_length > len(data[4:]):
-        return ("", data)
-    else:
-        return (data[4:4+msg_length], data[4+msg_length:])
+        if msg_length > len(data[4:]):
+            return ("", data)
+        else:
+            return (data[4:4+msg_length], data[4+msg_length:])
+
+    def send_message(self, command, channel, message):
+        message_json = json.dumps({'command': command, 'channel': channel,
+                                   'message': message}).encode("utf8")
+        message_len = struct.pack('>i', len(message_json))
+        self.sock.send(message_len + message_json)
 
 
 TCP_IP = "127.0.0.1"
@@ -158,10 +192,10 @@ SUB_MSG = {'command': 'subscribe', 'channel': CHANNEL}
 IN_QUEUE = Queue()
 OUT_QUEUE = Queue()
 
-GAME = Game(IN_QUEUE, OUT_QUEUE)
+COMMUNICATOR = Communicator(TCP_IP, TCP_PORT, IN_QUEUE, OUT_QUEUE)
+COMMUNICATOR.start()
 
-WORKER = Thread(target=tcp_worker)
-WORKER.setDaemon(False)
-WORKER.start()
+GAME = Game(IN_QUEUE, OUT_QUEUE)
+GAME.start()
 
 mainloop()
