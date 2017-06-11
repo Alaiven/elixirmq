@@ -60,7 +60,7 @@ class Benchmark(object):
         if self.counter > 10000:
             print "10000 messages:", self.message
             self.counter = 0
-        sleep(0.01)
+        sleep(0.001)
         self.send_message(self.prepare_message('send', self.target_channel, {'data': self.message}))
 
     @staticmethod
