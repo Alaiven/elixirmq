@@ -94,4 +94,4 @@ B2.start()
 print "Benchmark started..."
 
 while True:
-    pass
+    sleep(60)
