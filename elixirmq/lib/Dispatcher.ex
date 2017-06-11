@@ -3,7 +3,7 @@ require Logger
 defmodule Dispatcher do
   use GenServer
 
-  def new(subs, cache) do
+  def start_link({subs, cache} = state, opts \\ []) do
     GenServer.start_link(__MODULE__, {subs, cache})
   end
 
@@ -18,7 +18,7 @@ defmodule Dispatcher do
   def unsubscribe(pid, channel, process) do
     GenServer.call(pid, {:unsub, channel, process})
   end
-
+  
   def handle_call({:sub, channel, process}, _from, {subs, cache}) do
     Subscriptions.subscribe(subs, channel, process)
 
@@ -26,7 +26,7 @@ defmodule Dispatcher do
 
     case Cache.get_list(cache, cache_key) do
       {:ok, messages} ->
-	Enum.map(messages, fn m -> send_message_direct(process, m, cache)  end)
+	Enum.map(messages, fn m -> MessageWorker.send_message_no_encode(process, m) end)
 	Cache.remove_list(cache, cache_key)
     end
 
@@ -50,25 +50,9 @@ defmodule Dispatcher do
 	end
 	{:reply, :empty, {subs, cache}}
       subscribers ->
-	Enum.map(subscribers, fn s -> encode_send_message(s, message, cache)  end)
+	Enum.map(subscribers, fn s -> MessageWorker.send_message(s, message) end)
 	{:reply, :ok, {subs, cache}}
     end
   end
-
-  defp encode_send_message(sub, message, cache) do
-    case MessageParser.encode(message) do
-      {:ok, msg} ->	
-	send_message_direct(sub, msg, cache)
-      {:error, cause} ->
-	Logger.error "Invalid JSON: " <> cause
-    end
-  end
-    
-  defp send_message_direct(sub, msg, cache) do
-    spawn(fn -> MessageWorker.send_message(sub, msg) end)
-    msg_log = "message: " <> msg
-    Cache.log(cache, msg_log)
-    Cache.incr(cache)
-  end
-  
+ 
 end

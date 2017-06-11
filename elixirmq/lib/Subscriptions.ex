@@ -3,8 +3,8 @@ require Logger
 defmodule Subscriptions do
   use GenServer
 
-  def new(cache) do
-    GenServer.start_link(__MODULE__, {%{}, cache})
+  def start_list(cache, opts \\ []) do
+    GenServer.start_link(__MODULE__, {%{}, cache}, opts)
   end
 
   def subscribe(pid, channel, process) do
@@ -26,13 +26,6 @@ defmodule Subscriptions do
       :error ->
     	{:reply, :ok, {Map.put(subs, channel, [process]), cache}}
     end
-    # case Cache.store_set(cache, "subs:" <> channel, process) do
-    #   {:ok, _} ->
-    # 	{:reply, :ok, {subs, cache}}
-    #   {:error, cause} ->
-    # 	Logger.error "Cahce error: " <> cause
-    # 	{:reply, :error, {subs, cache}}
-    # end
   end
 
   def handle_call({:unsubscribe, channel, process}, _from, {subs, cache}) do
@@ -42,24 +35,10 @@ defmodule Subscriptions do
       :error ->
     	{:reply, :ok, {subs, cache}}
     end
-    # case Cache.remove_set(cache, "subs:" <> channel, process) do
-    #  {:ok, _} ->
-    # 	{:reply, :ok, {subs, cache}}
-    #   {:error, cause} ->
-    # 	Logger.error "Cahce error: " <> cause
-    # 	{:reply, :error, {subs, cache}}
-    # end
   end
 
   def handle_call({:get, channel}, _from, {subs, cache}) do
     {:reply, subs[channel], {subs, cache}}
-    # case Cache.get_set(cache, "subs:" <> channel) do
-    #  {:ok, value} ->
-    # 	{:reply, value, {subs, cache}}
-    #   {:error, cause} ->
-    # 	Logger.error "Cahce error: " <> cause
-    # 	{:reply, :error, {subs, cache}}
-    # end
   end
 
 

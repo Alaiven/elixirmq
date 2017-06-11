@@ -3,8 +3,20 @@ require Logger
 defmodule Cache do
   use GenServer
 
-  def new(redis_conn) do
-    GenServer.start_link(__MODULE__, redis_conn)
+  def start_link(redis_conn, opts \\ []) do
+    GenServer.start_link(__MODULE__, redis_conn, opts)
+  end
+
+  def expire(pid, key, time) do
+    GenServer.call(pid, {:expire, key, time})
+  end
+
+  def store_key(pid, key, value) do
+    GenServer.call(pid, {:store_k, key, value})
+  end
+
+  def get_key(pid, key) do
+    GenServer.call(pid, {:get_k, key})
   end
 
   def store_list(pid, key, value) do
@@ -29,6 +41,36 @@ defmodule Cache do
 
   defp counter() do
     ["INCR", "messages:count"]
+  end
+
+  def handle_call({:expire, key, time}, _from, redis_conn) do
+    case Redix.pipeline(redis_conn, [["EXPIRE", key, time], counter()]) do
+      {:ok, result} ->
+	{:reply, {:ok, hd(result)}, redis_conn}
+      {:error, cause} ->
+	Logger.error "Refis error: " <> cause
+	{:reply, {:error, cause}, redis_conn}
+    end
+  end
+
+  def handle_call({:store_k, key, value}, _from, redis_conn) do
+    case Redix.pipeline(redis_conn, [["SET", key, value], counter()]) do
+      {:ok, result} ->
+	{:reply, {:ok, hd(result)}, redis_conn}
+      {:error, cause} ->
+	Logger.error "Refis error: " <> cause
+	{:reply, {:error, cause}, redis_conn}
+    end
+  end
+
+  def handle_call({:get_k, key}, _from, redis_conn) do
+    case Redix.pipeline(redis_conn, [["GET", key], counter()]) do
+      {:ok, result} ->
+	{:reply, {:ok, hd(result)}, redis_conn}
+      {:error, cause} ->
+	Logger.error "Refis error: " <> cause
+	{:reply, {:error, cause}, redis_conn}
+    end
   end
 
   def handle_call({:store_l, key, value}, _from, redis_conn) do

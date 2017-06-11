@@ -1,6 +1,7 @@
 require Logger
 
 defmodule Elixirmq do
+  import Supervisor.Spec
   use Application
 
   def start(_type, _args) do
@@ -14,19 +15,23 @@ defmodule Elixirmq do
 
     {:ok, conn} = Redix.start_link(host: "localhost", port: 6379)
 
-    {:ok, cache} = Cache.new(conn)
-    {:ok, subs} = Subscriptions.new(cache)
-    {:ok, dispatcher} = Dispatcher.new(subs, cache)
+    children = [
+      worker(Cache, conn, [name: MyCache]),
+      worker(Subscriptions, MyCache, [name: MySubscriptions]),
+      worker(Dispatcher, {MySubscriptions, MyCache}, [name: MyDispatcher])
+    ]
+    
+    {:ok, supervisor} = Supervisor.start_link(children, strategy: :one_for_one)
+    
     {:ok, socket} = :gen_tcp.listen(port, tcp_options)
     
-    listen(socket, dispatcher)
+    listen(socket, supervisor)
   end
 
-  defp listen(socket, dispatcher) do
+  defp listen(socket, supervisor) do
     {:ok, conn} = :gen_tcp.accept(socket)
-    {:ok, _} = :inet.peername(conn)
-    spawn(fn -> MessageWorker.recv(conn, dispatcher) end)
-    listen(socket, dispatcher)
+    Supervisor.start_child(supervisor, worker(MessageWorker, {conn, MyDispatcher, MyCache}))
+    listen(socket, supervisor)
   end
 
   
