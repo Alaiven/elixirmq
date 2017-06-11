@@ -43,11 +43,11 @@ def msg_work():
     redis_client = redis.StrictRedis(host='localhost', port=6379, db=0)
 
     while True:
-        messages_count = int(redis_client.get('messages:count'))
+        messages_count = redis_client.get('messages:count')
         if messages_count != None:
-            print messages_count, "[msg/s]"
+            print int(messages_count), "[msg/s]"
         else:
-            print "None"
+            print "0 [msg/s]"
         redis_client.set('messages:count', 0)
         time.sleep(1)
 
