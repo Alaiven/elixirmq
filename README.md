@@ -30,9 +30,9 @@ message : { message_data }
 
 where:
 
-`command_data - name of the command: 'subscribe' or 'send'`,
+`command_data - name of the command: 'subscribe' or 'send'`
 
-`channel_data - name of the channel you want to subscribe to or send message through`,
+`channel_data - name of the channel you want to subscribe to or send message through`
 
 `message_data - JSON object containing your message. Empty if command == 'subscribe'`
 
@@ -42,7 +42,7 @@ Mq looks for any subscriber on the given channel and sends them the `message_dat
 
 Mq also stores messages, when no subscriber is present. They will be sent to the first subscriber on the given channel.
 
-Unsubscribing from channels is done when a connection between mq and client is lost
+Unsubscribing from channels is done when a connection between mq and client is lost.
 
 ***Usefull scripts***
 

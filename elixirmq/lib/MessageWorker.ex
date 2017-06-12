@@ -3,9 +3,9 @@ require Logger
 defmodule MessageWorker do
   use GenServer
 
-  def start_link({connection, dispatcher, cache} = state, opts \\ []) do
-    {:ok, client} =  GenServer.start_link(__MODULE__, {connection, cache}, opts)
-    Task.start_link(fn -> MessageWorker.recv({connection, client, dispatcher}) end)
+  def start_link(connection, opts \\ []) do
+    {:ok, client} =  GenServer.start_link(__MODULE__, connection, opts)
+    Task.start_link(fn -> MessageWorker.recv({connection, client}) end)
     {:ok, client}
   end
 
@@ -22,14 +22,14 @@ defmodule MessageWorker do
     GenServer.call(pid, {:send_message, message})
   end
 
-  def handle_call({:send_message, message}, _from, {connection, cache} = state) do
+  def handle_call({:send_message, message}, _from, connection) do
     msg_log = "message: " <> message
-    Cache.log(cache, msg_log)
-    Cache.incr(cache)
+    Cache.log(App.Cache, msg_log)
+    Cache.incr(App.Cache)
 
     message_size = byte_size(message)
     :gen_tcp.send(connection, <<message_size :: size(32)>> <> message)
-    {:reply, :ok, state}
+    {:reply, :ok, connection}
   end
 
   # server end
@@ -38,7 +38,7 @@ defmodule MessageWorker do
     recv(state, "", "")
   end
 
-  defp recv({connection, client, dispatcher} = state, channel, data_reminder) do
+  defp recv({connection, client} = state, channel, data_reminder) do
     case :gen_tcp.recv(connection, 0) do
       {:ok, data} ->
 	handle_data(state, channel, data_reminder <> data)	
@@ -48,7 +48,7 @@ defmodule MessageWorker do
 	    :ok
 	  ch ->
 	    Logger.info "Unsub: " <> ch
-	    Dispatcher.unsubscribe(dispatcher, channel, client)
+	    Dispatcher.unsubscribe(App.Dispatcher, channel, client)
 	end
     end
   end
@@ -63,15 +63,15 @@ defmodule MessageWorker do
     end
   end
 
-  defp handle_message({_, client, dispatcher}, channel, message) do
+  defp handle_message({_, client}, channel, message) do
     case MessageParser.parse(message) do
       {:subscribe, new_channel} ->
 	IO.inspect(client)
 	Logger.info "Sub: " <> new_channel
-	Dispatcher.subscribe(dispatcher, new_channel, client)
+	Dispatcher.subscribe(App.Dispatcher, new_channel, client)
 	new_channel
       {:send, channel, message} ->
-	Dispatcher.send_message(dispatcher, channel, message)
+	Dispatcher.send_message(App.Dispatcher, channel, message)
 	channel
       {:error, error} ->
 	Logger.info error <> " ORIGINAL: " <> message

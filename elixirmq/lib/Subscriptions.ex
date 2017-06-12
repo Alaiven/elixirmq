@@ -3,8 +3,8 @@ require Logger
 defmodule Subscriptions do
   use GenServer
 
-  def start_list(cache, opts \\ []) do
-    GenServer.start_link(__MODULE__, {%{}, cache}, opts)
+  def start_link(opts \\ []) do
+    GenServer.start_link(__MODULE__, %{}, opts)
   end
 
   def subscribe(pid, channel, process) do
@@ -19,26 +19,26 @@ defmodule Subscriptions do
     GenServer.call(pid, {:get, channel})
   end
 
-  def handle_call({:subscribe, channel, process}, _from, {subs, cache}) do
+  def handle_call({:subscribe, channel, process}, _from, subs) do
     case Map.fetch(subs, channel) do
       {:ok, value} ->
-    	{:reply, :ok, {Map.put(subs, channel, [process | value]), cache}}
+    	{:reply, :ok, Map.put(subs, channel, [process | value])}
       :error ->
-    	{:reply, :ok, {Map.put(subs, channel, [process]), cache}}
+    	{:reply, :ok, Map.put(subs, channel, [process])}
     end
   end
 
-  def handle_call({:unsubscribe, channel, process}, _from, {subs, cache}) do
+  def handle_call({:unsubscribe, channel, process}, _from, subs) do
     case Map.fetch(subs, channel) do
       {:ok, value} ->
-    	{:reply, :ok, {Map.put(subs, channel, List.delete(value, process)), cache}}
+    	{:reply, :ok, Map.put(subs, channel, List.delete(value, process))}
       :error ->
-    	{:reply, :ok, {subs, cache}}
+    	{:reply, :ok, subs}
     end
   end
 
-  def handle_call({:get, channel}, _from, {subs, cache}) do
-    {:reply, subs[channel], {subs, cache}}
+  def handle_call({:get, channel}, _from, subs) do
+    {:reply, subs[channel], subs}
   end
 
 
